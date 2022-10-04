@@ -25,16 +25,15 @@ import "../openzeppelin-presets/metatx/ERC2771ContextUpgradeable.sol";
 
 import "../lib/CurrencyTransferLib.sol";
 import "../lib/FeeType.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 contract Marketplace is
     Initializable,
     IMarketplace,
     ReentrancyGuardUpgradeable,
-    ERC2771ContextUpgradeable,
-    MulticallUpgradeable,
-    AccessControlEnumerableUpgradeable,
-    IERC721ReceiverUpgradeable,
-    IERC1155ReceiverUpgradeable
+    ERC721Upgradeable,
+     OwnableUpgradeable
 {
     /*///////////////////////////////////////////////////////////////
                             State variables
@@ -49,7 +48,7 @@ contract Marketplace is
     bytes32 private constant ASSET_ROLE = keccak256("ASSET_ROLE");
 
     /// @dev The address of the native token wrapper contract.
-    address private immutable nativeTokenWrapper;
+    address private nativeTokenWrapper;
 
     /// @dev Total number of listings ever created in the marketplace.
     uint256 public totalListings;
@@ -109,33 +108,22 @@ contract Marketplace is
                     Constructor + initializer logic
     //////////////////////////////////////////////////////////////*/
 
-    constructor(address _nativeTokenWrapper) initializer {
-        nativeTokenWrapper = _nativeTokenWrapper;
-    }
+
 
     /// @dev Initiliazes the contract, like a constructor.
     function initialize(
-        address _defaultAdmin,
-        string memory _contractURI,
-        address[] memory _trustedForwarders,
-        address _platformFeeRecipient,
         uint256 _platformFeeBps
     ) external initializer {
         // Initialize inherited contracts, most base-like -> most derived.
         __ReentrancyGuard_init();
-        __ERC2771Context_init(_trustedForwarders);
+        __Ownable_init();
 
         // Initialize this contract's state.
         timeBuffer = 15 minutes;
         bidBufferBps = 500;
 
-        contractURI = _contractURI;
         platformFeeBps = uint64(_platformFeeBps);
-        platformFeeRecipient = _platformFeeRecipient;
-
-        _setupRole(DEFAULT_ADMIN_ROLE, _defaultAdmin);
-        _setupRole(LISTER_ROLE, address(0));
-        _setupRole(ASSET_ROLE, address(0));
+        platformFeeRecipient = msg.sender;
     }
 
     /*///////////////////////////////////////////////////////////////
@@ -158,67 +146,53 @@ contract Marketplace is
     /*///////////////////////////////////////////////////////////////
                         ERC 165 / 721 / 1155 logic
     //////////////////////////////////////////////////////////////*/
-
-    function onERC1155Received(
-        address,
-        address,
-        uint256,
-        uint256,
-        bytes memory
-    ) public virtual override returns (bytes4) {
-        return this.onERC1155Received.selector;
-    }
-
-    function onERC1155BatchReceived(
-        address,
-        address,
-        uint256[] memory,
-        uint256[] memory,
-        bytes memory
-    ) public virtual override returns (bytes4) {
-        return this.onERC1155BatchReceived.selector;
-    }
-
-    function onERC721Received(
-        address,
-        address,
-        uint256,
-        bytes calldata
-    ) external pure override returns (bytes4) {
-        return this.onERC721Received.selector;
-    }
-
-    function supportsInterface(bytes4 interfaceId)
-        public
-        view
-        virtual
-        override(AccessControlEnumerableUpgradeable, IERC165Upgradeable)
-        returns (bool)
-    {
-        return
-            interfaceId == type(IERC1155ReceiverUpgradeable).interfaceId ||
-            interfaceId == type(IERC721ReceiverUpgradeable).interfaceId ||
-            super.supportsInterface(interfaceId);
-    }
+    
 
     /*///////////////////////////////////////////////////////////////
                 Listing (create-update-delete) logic
     //////////////////////////////////////////////////////////////*/
 
+    // Lets you pass a list of erc721 tokens to be listed (equivalent to our "collection")
+    // In _params, tokenId is the first token and quantityToList is the collection length.
+    function createListingForCollection(ListingParameters memory _params) external {
+        for(uint256 i =_params.tokenId; i< (_params.tokenId +_params.quantityToList);i++){
+            ListingParameters memory tokenParams = ListingParameters({
+                     assetContract:_params.assetContract,
+                     tokenId:i,
+                     startTime: _params.startTime,
+                     secondsUntilEndTime:_params.secondsUntilEndTime,
+                     quantityToList:_params.quantityToList,
+                     currencyToAccept: _params.currencyToAccept,
+                     reservePricePerToken:_params.reservePricePerToken,
+                     buyoutPricePerToken:_params.buyoutPricePerToken,
+                     listingType:_params.listingType,
+                     payee: _params.payee
+                });
+            // skip any tokens not owned by _msg.sender
+            if(isOwnedAndApproved(_msgSender(), _params.assetContract, i)){
+                createListing( tokenParams);
+            }
+            //TODO throw error if doesn't own any tokens
+        }
+
+
+    }
+
+
+
+
+
     /// @dev Lets a token owner list tokens for sale: Direct Listing or Auction.
-    function createListing(ListingParameters memory _params) external override {
+    function createListing(ListingParameters memory _params) public override {
         // Get values to populate `Listing`.
+
+        require (IERC165Upgradeable( _params.assetContract).supportsInterface(type(IERC721Upgradeable).interfaceId),
+                 "Not ERC721!");
         uint256 listingId = totalListings;
         totalListings += 1;
 
         address tokenOwner = _msgSender();
-        TokenType tokenTypeOfListing = getTokenType(_params.assetContract);
-        uint256 tokenAmountToList = getSafeQuantity(tokenTypeOfListing, _params.quantityToList);
-
-        require(tokenAmountToList > 0, "QUANTITY");
-        require(hasRole(LISTER_ROLE, address(0)) || hasRole(LISTER_ROLE, _msgSender()), "!LISTER");
-        require(hasRole(ASSET_ROLE, address(0)) || hasRole(ASSET_ROLE, _params.assetContract), "!ASSET");
-
+        
         uint256 startTime = _params.startTime;
         if (startTime < block.timestamp) {
             // do not allow listing to start in the past (1 hour buffer)
@@ -229,9 +203,7 @@ contract Marketplace is
         validateOwnershipAndApproval(
             tokenOwner,
             _params.assetContract,
-            _params.tokenId,
-            tokenAmountToList,
-            tokenTypeOfListing
+            _params.tokenId
         );
 
         Listing memory newListing = Listing({
@@ -241,11 +213,11 @@ contract Marketplace is
             tokenId: _params.tokenId,
             startTime: startTime,
             endTime: startTime + _params.secondsUntilEndTime,
-            quantity: tokenAmountToList,
+            quantity: 1,
             currency: _params.currencyToAccept,
             reservePricePerToken: _params.reservePricePerToken,
             buyoutPricePerToken: _params.buyoutPricePerToken,
-            tokenType: tokenTypeOfListing,
+            tokenType: IMarketplace.TokenType.ERC721,
             listingType: _params.listingType
         });
 
@@ -254,7 +226,7 @@ contract Marketplace is
         // Tokens listed for sale in an auction are escrowed in Marketplace.
         if (newListing.listingType == ListingType.Auction) {
             require(newListing.buyoutPricePerToken >= newListing.reservePricePerToken, "RESERVE");
-            transferListingTokens(tokenOwner, address(this), tokenAmountToList, newListing);
+            transferListingTokens(tokenOwner, address(this), newListing);
         }
 
         emit ListingAdded(listingId, _params.assetContract, tokenOwner, newListing);
@@ -309,20 +281,18 @@ contract Marketplace is
             // Transfer all escrowed tokens back to the lister, to be reflected in the lister's
             // balance for the upcoming ownership and approval check.
             if (isAuction) {
-                transferListingTokens(address(this), targetListing.tokenOwner, targetListing.quantity, targetListing);
+                transferListingTokens(address(this), targetListing.tokenOwner, targetListing);
             }
 
             validateOwnershipAndApproval(
                 targetListing.tokenOwner,
                 targetListing.assetContract,
-                targetListing.tokenId,
-                safeNewQuantity,
-                targetListing.tokenType
+                targetListing.tokenId
             );
 
             // Escrow the new quantity of tokens to list in the auction.
             if (isAuction) {
-                transferListingTokens(targetListing.tokenOwner, address(this), safeNewQuantity, targetListing);
+                transferListingTokens(targetListing.tokenOwner, address(this), targetListing);
             }
         }
 
@@ -417,7 +387,7 @@ contract Marketplace is
         listings[_targetListing.listingId] = _targetListing;
 
         payout(_payer, _targetListing.tokenOwner, _currency, _currencyAmountToTransfer, _targetListing);
-        transferListingTokens(_targetListing.tokenOwner, _receiver, _listingTokenAmountToTransfer, _targetListing);
+        transferListingTokens(_targetListing.tokenOwner, _receiver, _targetListing);
 
         emit NewSale(
             _targetListing.listingId,
@@ -626,7 +596,7 @@ contract Marketplace is
 
         delete listings[_targetListing.listingId];
 
-        transferListingTokens(address(this), _targetListing.tokenOwner, _targetListing.quantity, _targetListing);
+        transferListingTokens(address(this), _targetListing.tokenOwner, _targetListing);
 
         emit AuctionClosed(_targetListing.listingId, _msgSender(), true, _targetListing.tokenOwner, address(0));
     }
@@ -655,7 +625,6 @@ contract Marketplace is
 
     /// @dev Closes an auction for the winning bidder; distributes auction items to the winning bidder.
     function _closeAuctionForBidder(Listing memory _targetListing, Offer memory _winningBid) internal {
-        uint256 quantityToSend = _winningBid.quantityWanted;
 
         _targetListing.endTime = block.timestamp;
         _winningBid.quantityWanted = 0;
@@ -663,7 +632,7 @@ contract Marketplace is
         winningBid[_targetListing.listingId] = _winningBid;
         listings[_targetListing.listingId] = _targetListing;
 
-        transferListingTokens(address(this), _winningBid.offeror, quantityToSend, _targetListing);
+        transferListingTokens(address(this), _winningBid.offeror, _targetListing);
 
         emit AuctionClosed(
             _targetListing.listingId,
@@ -682,14 +651,9 @@ contract Marketplace is
     function transferListingTokens(
         address _from,
         address _to,
-        uint256 _quantity,
         Listing memory _listing
     ) internal {
-        if (_listing.tokenType == TokenType.ERC1155) {
-            IERC1155Upgradeable(_listing.assetContract).safeTransferFrom(_from, _to, _listing.tokenId, _quantity, "");
-        } else if (_listing.tokenType == TokenType.ERC721) {
-            IERC721Upgradeable(_listing.assetContract).safeTransferFrom(_from, _to, _listing.tokenId, "");
-        }
+        IERC721Upgradeable(_listing.assetContract).safeTransferFrom(_from, _to, _listing.tokenId, "");
     }
 
     /// @dev Pays out stakeholders in a sale.
@@ -760,25 +724,25 @@ contract Marketplace is
     function validateOwnershipAndApproval(
         address _tokenOwner,
         address _assetContract,
-        uint256 _tokenId,
-        uint256 _quantity,
-        TokenType _tokenType
-    ) internal view {
-        address market = address(this);
-        bool isValid;
-
-        if (_tokenType == TokenType.ERC1155) {
-            isValid =
-                IERC1155Upgradeable(_assetContract).balanceOf(_tokenOwner, _tokenId) >= _quantity &&
-                IERC1155Upgradeable(_assetContract).isApprovedForAll(_tokenOwner, market);
-        } else if (_tokenType == TokenType.ERC721) {
-            isValid =
-                IERC721Upgradeable(_assetContract).ownerOf(_tokenId) == _tokenOwner &&
-                (IERC721Upgradeable(_assetContract).getApproved(_tokenId) == market ||
-                    IERC721Upgradeable(_assetContract).isApprovedForAll(_tokenOwner, market));
-        }
-
+        uint256 _tokenId
+        ) internal view {
+        bool isValid = isOwnedAndApproved( _tokenOwner, _assetContract,_tokenId);
         require(isValid, "!BALNFT");
+    }
+
+    function isOwnedAndApproved(
+        address _tokenOwner,
+        address _assetContract,
+        uint256 _tokenId) internal view returns (bool isValid){
+        address market = address(this);
+        return
+            IERC721Upgradeable(_assetContract).ownerOf(_tokenId) == _tokenOwner &&
+            (IERC721Upgradeable(_assetContract).getApproved(_tokenId) == market ||
+                IERC721Upgradeable(_assetContract).isApprovedForAll(_tokenOwner, market));
+    }
+
+    function cool() public  pure returns(bool result) {
+        return true;
     }
 
     /// @dev Validates conditions of a direct listing sale.
@@ -811,9 +775,7 @@ contract Marketplace is
         validateOwnershipAndApproval(
             _listing.tokenOwner,
             _listing.assetContract,
-            _listing.tokenId,
-            _quantityToBuy,
-            _listing.tokenType
+            _listing.tokenId
         );
     }
 
@@ -834,17 +796,6 @@ contract Marketplace is
         }
     }
 
-    /// @dev Returns the interface supported by a contract.
-    function getTokenType(address _assetContract) internal view returns (TokenType tokenType) {
-        if (IERC165Upgradeable(_assetContract).supportsInterface(type(IERC1155Upgradeable).interfaceId)) {
-            tokenType = TokenType.ERC1155;
-        } else if (IERC165Upgradeable(_assetContract).supportsInterface(type(IERC721Upgradeable).interfaceId)) {
-            tokenType = TokenType.ERC721;
-        } else {
-            revert("token must be ERC1155 or ERC721.");
-        }
-    }
-
     /// @dev Returns the platform fee recipient and bps.
     function getPlatformFeeInfo() external view returns (address, uint16) {
         return (platformFeeRecipient, uint16(platformFeeBps));
@@ -856,9 +807,7 @@ contract Marketplace is
 
     /// @dev Lets a contract admin update platform fee recipient and bps.
     function setPlatformFeeInfo(address _platformFeeRecipient, uint256 _platformFeeBps)
-        external
-        onlyRole(DEFAULT_ADMIN_ROLE)
-    {
+        external onlyOwner    {
         require(_platformFeeBps <= MAX_BPS, "bps <= 10000.");
 
         platformFeeBps = uint64(_platformFeeBps);
@@ -868,7 +817,7 @@ contract Marketplace is
     }
 
     /// @dev Lets a contract admin set auction buffers.
-    function setAuctionBuffers(uint256 _timeBuffer, uint256 _bidBufferBps) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setAuctionBuffers(uint256 _timeBuffer, uint256 _bidBufferBps) external onlyOwner {
         require(_bidBufferBps < MAX_BPS, "invalid BPS.");
 
         timeBuffer = uint64(_timeBuffer);
@@ -878,7 +827,7 @@ contract Marketplace is
     }
 
     /// @dev Lets a contract admin set the URI for the contract-level metadata.
-    function setContractURI(string calldata _uri) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setContractURI(string calldata _uri) external onlyOwner {
         contractURI = _uri;
     }
 
@@ -886,23 +835,6 @@ contract Marketplace is
                             Miscellaneous
     //////////////////////////////////////////////////////////////*/
 
-    function _msgSender()
-        internal
-        view
-        virtual
-        override(ContextUpgradeable, ERC2771ContextUpgradeable)
-        returns (address sender)
-    {
-        return ERC2771ContextUpgradeable._msgSender();
-    }
 
-    function _msgData()
-        internal
-        view
-        virtual
-        override(ContextUpgradeable, ERC2771ContextUpgradeable)
-        returns (bytes calldata)
-    {
-        return ERC2771ContextUpgradeable._msgData();
-    }
+    
 }

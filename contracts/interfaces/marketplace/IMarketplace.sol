@@ -76,6 +76,9 @@ interface IMarketplace is IThirdwebContract, IPlatformFee {
      *                               is closed.
      *
      *  @param listingType           The type of listing to create - a direct listing or an auction.
+     *
+     *  @param payee                 The address of the payee. This is typically the token owner but can be another address.
+     *                               if using a fiat payout tool that requires sending funds to its wallet (www.paper.xyz)
     **/
     struct ListingParameters {
         address assetContract;
@@ -87,6 +90,7 @@ interface IMarketplace is IThirdwebContract, IPlatformFee {
         uint256 reservePricePerToken;
         uint256 buyoutPricePerToken;
         ListingType listingType;
+        address payee;
     }
 
     /**
