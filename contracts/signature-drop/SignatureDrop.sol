@@ -142,7 +142,7 @@ contract SignatureDrop is
         uint256 _amount,
         string calldata _baseURIForTokens,
         bytes calldata _data
-    ) public override onlyRole(minterRole) returns (uint256 batchId) {
+    ) public override returns (uint256 batchId) {
         if (_data.length > 0) {
             (bytes memory encryptedURI, bytes32 provenanceHash) = abi.decode(_data, (bytes, bytes32));
             if (encryptedURI.length != 0 && provenanceHash != "") {
@@ -178,10 +178,6 @@ contract SignatureDrop is
         payable
         returns (address signer)
     {
-        if (_req.quantity == 0) {
-            revert("0 qty");
-        }
-
         uint256 tokenIdToMint = _currentIndex;
         if (tokenIdToMint + _req.quantity > nextTokenIdToLazyMint) {
             revert("Not enough tokens");
@@ -190,14 +186,7 @@ contract SignatureDrop is
         // Verify and process payload.
         signer = _processRequest(_req, _signature);
 
-        /**
-         *  Get receiver of tokens.
-         *
-         *  Note: If `_req.to == address(0)`, a `mintWithSignature` transaction sitting in the
-         *        mempool can be frontrun by copying the input data, since the minted tokens
-         *        will be sent to the `_msgSender()` in this case.
-         */
-        address receiver = _req.to == address(0) ? _msgSender() : _req.to;
+        address receiver = _req.to;
 
         // Collect price
         collectPriceOnClaim(_req.primarySaleRecipient, _req.quantity, _req.currency, _req.pricePerToken);
@@ -306,7 +295,7 @@ contract SignatureDrop is
 
     /// @dev Returns whether lazy minting can be done in the given execution context.
     function _canLazyMint() internal view virtual override returns (bool) {
-        return hasRole(DEFAULT_ADMIN_ROLE, _msgSender());
+        return hasRole(minterRole, _msgSender());
     }
 
     /*///////////////////////////////////////////////////////////////

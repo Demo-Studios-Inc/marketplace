@@ -12,6 +12,7 @@ import "../extension/LazyMint.sol";
 import "../extension/interface/IClaimableERC1155.sol";
 
 import "../lib/TWStrings.sol";
+import "../openzeppelin-presets/security/ReentrancyGuard.sol";
 
 /**
  *      BASE:      ERC1155Base
@@ -53,7 +54,8 @@ contract ERC1155LazyMint is
     Multicall,
     BatchMintMetadata,
     LazyMint,
-    IClaimableERC1155
+    IClaimableERC1155,
+    ReentrancyGuard
 {
     using TWStrings for uint256;
 
@@ -97,10 +99,15 @@ contract ERC1155LazyMint is
 
     /**
      *  @notice          Lets an address claim multiple lazy minted NFTs at once to a recipient.
-     *                   Contract creators should override this function to create custom logic for claiming,
+     *                   This function prevents any reentrant calls, and is not allowed to be overridden.
+     *
+     *                   Contract creators should override `verifyClaim` and `transferTokensOnClaim`
+     *                   functions to create custom logic for verification and claiming,
      *                   for e.g. price collection, allowlist, max quantity, etc.
      *
-     *  @dev             The logic in the `verifyClaim` function determines whether the caller is authorized to mint NFTs.
+     *  @dev             The logic in `verifyClaim` determines whether the caller is authorized to mint NFTs.
+     *                   The logic in `transferTokensOnClaim` does actual minting of tokens,
+     *                   can also be used to apply other state changes.
      *
      *  @param _receiver  The recipient of the tokens to mint.
      *  @param _tokenId   The tokenId of the lazy minted NFT to mint.
@@ -110,12 +117,11 @@ contract ERC1155LazyMint is
         address _receiver,
         uint256 _tokenId,
         uint256 _quantity
-    ) public payable virtual {
-        verifyClaim(msg.sender, _tokenId, _quantity); // add your claim verification logic by overriding this function
-
+    ) public payable nonReentrant {
         require(_tokenId < nextTokenIdToMint(), "invalid id");
+        verifyClaim(msg.sender, _tokenId, _quantity); // Add your claim verification logic by overriding this function.
 
-        _mint(_receiver, _tokenId, _quantity, "");
+        transferTokensOnClaim(_receiver, _tokenId, _quantity); // Mints tokens. Apply any state updates by overriding this function.
         emit TokensClaimed(msg.sender, _receiver, _tokenId, _quantity);
     }
 
@@ -204,6 +210,22 @@ contract ERC1155LazyMint is
     /*//////////////////////////////////////////////////////////////
                         Internal functions
     //////////////////////////////////////////////////////////////*/
+
+    /**
+     *  @notice          Mints tokens to receiver on claim.
+     *                   Any state changes related to `claim` must be applied
+     *                   here by overriding this function.
+     *
+     *  @dev             Override this function to add logic for state updation.
+     *                   When overriding, apply any state changes before `_mint`.
+     */
+    function transferTokensOnClaim(
+        address _receiver,
+        uint256 _tokenId,
+        uint256 _quantity
+    ) internal virtual {
+        _mint(_receiver, _tokenId, _quantity, "");
+    }
 
     /// @dev Returns whether lazy minting can be done in the given execution context.
     function _canLazyMint() internal view virtual override returns (bool) {

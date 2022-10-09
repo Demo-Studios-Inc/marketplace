@@ -47,10 +47,10 @@ function OPERATOR_ROLE() external view returns (bytes32)
 ### add
 
 ```solidity
-function add(address _deployer, address _deployment) external nonpayable
+function add(address _deployer, address _deployment, uint256 _chainId) external nonpayable
 ```
 
-
+Add a deployment for a deployer.
 
 
 
@@ -60,14 +60,15 @@ function add(address _deployer, address _deployment) external nonpayable
 |---|---|---|
 | _deployer | address | undefined |
 | _deployment | address | undefined |
+| _chainId | uint256 | undefined |
 
 ### count
 
 ```solidity
-function count(address _deployer) external view returns (uint256)
+function count(address _deployer) external view returns (uint256 deploymentCount)
 ```
 
-
+Get the total number of deployments for a deployer.
 
 
 
@@ -81,15 +82,15 @@ function count(address _deployer) external view returns (uint256)
 
 | Name | Type | Description |
 |---|---|---|
-| _0 | uint256 | undefined |
+| deploymentCount | uint256 | undefined |
 
 ### getAll
 
 ```solidity
-function getAll(address _deployer) external view returns (address[])
+function getAll(address _deployer) external view returns (struct ITWRegistry.Deployment[] allDeployments)
 ```
 
-
+Get all deployments for a deployer.
 
 
 
@@ -103,7 +104,7 @@ function getAll(address _deployer) external view returns (address[])
 
 | Name | Type | Description |
 |---|---|---|
-| _0 | address[] | undefined |
+| allDeployments | ITWRegistry.Deployment[] | undefined |
 
 ### getRoleAdmin
 
@@ -180,7 +181,7 @@ function grantRole(bytes32 role, address account) external nonpayable
 
 
 
-*Grants `role` to `account`. If `account` had not been already granted `role`, emits a {RoleGranted} event. Requirements: - the caller must have ``role``&#39;s admin role.*
+*Grants `role` to `account`. If `account` had not been already granted `role`, emits a {RoleGranted} event. Requirements: - the caller must have ``role``&#39;s admin role. May emit a {RoleGranted} event.*
 
 #### Parameters
 
@@ -259,10 +260,10 @@ function multicall(bytes[] data) external nonpayable returns (bytes[] results)
 ### remove
 
 ```solidity
-function remove(address _deployer, address _deployment) external nonpayable
+function remove(address _deployer, address _deployment, uint256 _chainId) external nonpayable
 ```
 
-
+Remove a deployment for a deployer.
 
 
 
@@ -272,6 +273,7 @@ function remove(address _deployer, address _deployment) external nonpayable
 |---|---|---|
 | _deployer | address | undefined |
 | _deployment | address | undefined |
+| _chainId | uint256 | undefined |
 
 ### renounceRole
 
@@ -281,7 +283,7 @@ function renounceRole(bytes32 role, address account) external nonpayable
 
 
 
-*Revokes `role` from the calling account. Roles are often managed via {grantRole} and {revokeRole}: this function&#39;s purpose is to provide a mechanism for accounts to lose their privileges if they are compromised (such as when a trusted device is misplaced). If the calling account had been revoked `role`, emits a {RoleRevoked} event. Requirements: - the caller must be `account`.*
+*Revokes `role` from the calling account. Roles are often managed via {grantRole} and {revokeRole}: this function&#39;s purpose is to provide a mechanism for accounts to lose their privileges if they are compromised (such as when a trusted device is misplaced). If the calling account had been revoked `role`, emits a {RoleRevoked} event. Requirements: - the caller must be `account`. May emit a {RoleRevoked} event.*
 
 #### Parameters
 
@@ -298,7 +300,7 @@ function revokeRole(bytes32 role, address account) external nonpayable
 
 
 
-*Revokes `role` from `account`. If `account` had been granted `role`, emits a {RoleRevoked} event. Requirements: - the caller must have ``role``&#39;s admin role.*
+*Revokes `role` from `account`. If `account` had been granted `role`, emits a {RoleRevoked} event. Requirements: - the caller must have ``role``&#39;s admin role. May emit a {RoleRevoked} event.*
 
 #### Parameters
 
@@ -336,7 +338,7 @@ function supportsInterface(bytes4 interfaceId) external view returns (bool)
 ### Added
 
 ```solidity
-event Added(address indexed deployer, address indexed deployment)
+event Added(address indexed deployer, address indexed deployment, uint256 indexed chainId)
 ```
 
 
@@ -349,11 +351,12 @@ event Added(address indexed deployer, address indexed deployment)
 |---|---|---|
 | deployer `indexed` | address | undefined |
 | deployment `indexed` | address | undefined |
+| chainId `indexed` | uint256 | undefined |
 
 ### Deleted
 
 ```solidity
-event Deleted(address indexed deployer, address indexed deployment)
+event Deleted(address indexed deployer, address indexed deployment, uint256 indexed chainId)
 ```
 
 
@@ -366,6 +369,7 @@ event Deleted(address indexed deployer, address indexed deployment)
 |---|---|---|
 | deployer `indexed` | address | undefined |
 | deployment `indexed` | address | undefined |
+| chainId `indexed` | uint256 | undefined |
 
 ### RoleAdminChanged
 
