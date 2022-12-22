@@ -206,22 +206,22 @@ function contractVersion() external pure returns (uint8)
 |---|---|---|
 | _0 | uint8 | undefined |
 
-### cool
+### createCollectionListingForCreatorByOwner
 
 ```solidity
-function cool() external pure returns (bool result)
+function createCollectionListingForCreatorByOwner(IMarketplace.ListingParameters _params, address _tokenOwner) external nonpayable
 ```
 
 
 
 
 
-
-#### Returns
+#### Parameters
 
 | Name | Type | Description |
 |---|---|---|
-| result | bool | undefined |
+| _params | IMarketplace.ListingParameters | undefined |
+| _tokenOwner | address | undefined |
 
 ### createListing
 

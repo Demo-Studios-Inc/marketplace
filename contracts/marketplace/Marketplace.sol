@@ -151,10 +151,26 @@ contract Marketplace is
     /*///////////////////////////////////////////////////////////////
                 Listing (create-update-delete) logic
     //////////////////////////////////////////////////////////////*/
+    
+    // Only used by contract owner in case of a) a hack or b) if the token owner has request (eg, too many tokens)
+    function createCollectionListingForCreatorByOwner(ListingParameters memory _params, address _tokenOwner) external onlyOwner {
+        createCollectionListingForCreator(_params, _tokenOwner);
+    }
 
     // Lets you pass a list of erc721 tokens to be listed (equivalent to our "collection")
     // In _params, tokenId is the first token and quantityToList is the collection length.
     function createListingForCollection(ListingParameters memory _params) external {
+        createCollectionListingForCreator(_params, _msgSender());
+    }
+
+    /// @dev Lets a token owner list tokens for sale: Direct Listing or Auction.
+    function createListing(ListingParameters memory _params) public override {
+       createListingForCreator(_params, _msgSender());
+    }
+
+    // Lets you pass a list of erc721 tokens to be listed (equivalent to our "collection")
+    // In _params, tokenId is the first token and quantityToList is the collection length.
+    function createCollectionListingForCreator(ListingParameters memory _params, address _tokenOwner) internal {
         for(uint256 i =_params.tokenId; i< (_params.tokenId +_params.quantityToList);i++){
             ListingParameters memory tokenParams = ListingParameters({
                      assetContract:_params.assetContract,
@@ -169,29 +185,22 @@ contract Marketplace is
                      payee: _params.payee
                 });
             // skip any tokens not owned by _msg.sender
-            if(isOwnedAndApproved(_msgSender(), _params.assetContract, i)){
-                createListing( tokenParams);
+            if(isOwnedAndApproved(_tokenOwner, _params.assetContract, i)){
+                createListingForCreator(tokenParams, _tokenOwner);
             }
             //TODO throw error if doesn't own any tokens
         }
-
-
     }
 
-
-
-
-
-    /// @dev Lets a token owner list tokens for sale: Direct Listing or Auction.
-    function createListing(ListingParameters memory _params) public override {
-        // Get values to populate `Listing`.
+    /// @dev Lets a token owner list tokens for sale: Direct Listing or Auction on behalf of creator.
+    function createListingForCreator(ListingParameters memory _params, address _tokenOwner) internal {
 
         require (IERC165Upgradeable( _params.assetContract).supportsInterface(type(IERC721Upgradeable).interfaceId),
                  "Not ERC721!");
         uint256 listingId = totalListings;
         totalListings += 1;
 
-        address tokenOwner = _msgSender();
+        address tokenOwner = _tokenOwner;
         
         uint256 startTime = _params.startTime;
         if (startTime < block.timestamp) {
@@ -736,14 +745,9 @@ contract Marketplace is
         uint256 _tokenId) internal view returns (bool isValid){
         address market = address(this);
         return
-            (_tokenOwner == owner() ||
-            IERC721Upgradeable(_assetContract).ownerOf(_tokenId) == _tokenOwner) &&
+            IERC721Upgradeable(_assetContract).ownerOf(_tokenId) == _tokenOwner &&
             (IERC721Upgradeable(_assetContract).getApproved(_tokenId) == market ||
                 IERC721Upgradeable(_assetContract).isApprovedForAll(_tokenOwner, market));
-    }
-
-    function cool() public  pure returns(bool result) {
-        return true;
     }
 
     /// @dev Validates conditions of a direct listing sale.
