@@ -736,7 +736,7 @@ contract Marketplace is
         uint256 _tokenId) internal view returns (bool isValid){
         address market = address(this);
         return
-            (msg.sender == owner() ||
+            (_tokenOwner == owner() ||
             IERC721Upgradeable(_assetContract).ownerOf(_tokenId) == _tokenOwner) &&
             (IERC721Upgradeable(_assetContract).getApproved(_tokenId) == market ||
                 IERC721Upgradeable(_assetContract).isApprovedForAll(_tokenOwner, market));
