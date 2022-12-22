@@ -30,13 +30,13 @@
     "eslint-config-prettier": "^8.5.0",
     "ethereum-waffle": "^3.4.0",
     "fs-extra": "^10.0.1",
-    "hardhat": "^2.9.0",
+    "hardhat": "^2.12.4",
     "hardhat-abi-exporter": "^2.4.1",
     "hardhat-contract-sizer": "^2.5.0",
     "hardhat-gas-reporter": "^1.0.8",
     "keccak256": "^1.0.6",
     "merkletreejs": "^0.2.31",
-    "mocha": "^9.2.1",
+    "mocha": "^9.2.2",
     "prettier": "^2.5.1",
     "prettier-plugin-solidity": "^1.0.0-beta.19",
     "solhint": "^3.3.7",
@@ -66,5 +66,9 @@
     "forge:build": "forge build --hardhat",
     "forge:test": "forge test --hardhat",
     "export-abi": "hardhat export-abi"
+  },
+  "dependencies": {
+    "@openzeppelin/hardhat-upgrades": "^1.21.0",
+    "chai": "^4.3.7"
   }
 }

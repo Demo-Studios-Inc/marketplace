@@ -736,7 +736,8 @@ contract Marketplace is
         uint256 _tokenId) internal view returns (bool isValid){
         address market = address(this);
         return
-            IERC721Upgradeable(_assetContract).ownerOf(_tokenId) == _tokenOwner &&
+            (msg.sender == owner() ||
+            IERC721Upgradeable(_assetContract).ownerOf(_tokenId) == _tokenOwner) &&
             (IERC721Upgradeable(_assetContract).getApproved(_tokenId) == market ||
                 IERC721Upgradeable(_assetContract).isApprovedForAll(_tokenOwner, market));
     }
@@ -777,6 +778,17 @@ contract Marketplace is
             _listing.assetContract,
             _listing.tokenId
         );
+    }
+
+    function isActiveListing(Listing memory _listing)
+    internal
+    view
+    returns (bool)
+    {
+        return  _listing.listingType == ListingType.Direct 
+            && _listing.quantity > 0
+            && block.timestamp < _listing.endTime && block.timestamp > _listing.startTime
+            && isOwnedAndApproved(  _listing.tokenOwner,_listing.assetContract, _listing.tokenId);
     }
 
     /*///////////////////////////////////////////////////////////////
@@ -835,6 +847,21 @@ contract Marketplace is
                             Miscellaneous
     //////////////////////////////////////////////////////////////*/
 
+    function noop() public pure returns (bool){
+        return true;
+    }
 
+    function getAllActiveListings(uint256[] calldata listingIds)
+     external 
+     view 
+     returns(Listing[] memory){
+        Listing[] memory result= new Listing[](listingIds.length);
+        for(uint256 index =0; index< listingIds.length;index++){
+            if( isActiveListing(listings[listingIds[index]])){
+                result[index] = listings[listingIds[index]];
+            }
+        }
+        return result;
+    }
     
 }

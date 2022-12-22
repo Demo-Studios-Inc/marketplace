@@ -11,6 +11,7 @@ import "@openzeppelin/contracts-upgradeable/governance/extensions/GovernorSettin
 import "@openzeppelin/contracts-upgradeable/governance/extensions/GovernorCountingSimpleUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/governance/extensions/GovernorVotesUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/governance/extensions/GovernorVotesQuorumFractionUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC721/IERC721ReceiverUpgradeable.sol";
 
 // Meta transactions
 import "../openzeppelin-presets/metatx/ERC2771ContextUpgradeable.sol";
